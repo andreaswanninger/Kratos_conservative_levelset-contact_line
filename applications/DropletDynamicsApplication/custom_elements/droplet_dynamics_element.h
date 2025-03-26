@@ -561,6 +561,29 @@ private:
      * @param rLHS The contribution of contact line dissipative force to LHS
      * @param rRHS The effect of pressure discontinuity is implemented as an interfacial integral on the RHS
      */
+    // AW 26.3: new, added
+    void SurfaceTension(
+        const TElementData& rData,
+        const double coefficient,
+        const double theta_advancing,
+        const double theta_receding,
+        const double zeta,
+        const double micro_length_scale,
+        const Kratos::Vector& rCurvature,
+        const Kratos::Vector& rIntWeights,
+        const Matrix& rIntShapeFunctions,
+        const std::vector< array_1d<double, 3> >& rIntNormalsNeg,
+        const std::vector<Kratos::Vector>& rCLWeights,
+        const std::vector<Matrix>& rCLShapeFunctions,
+        const std::vector<Vector>& rTangential,
+        MatrixType& rLHS,
+        VectorType& rRHS,
+        const bool quasi_static_contact_angle,
+        const double theta_equilibrium,
+        const double penalty_coefficient);
+    
+    // AW 26.3: old, outcommented
+    /*
     void SurfaceTension(
         const TElementData& rData,
         const double coefficient,
@@ -577,6 +600,7 @@ private:
         const std::vector<Vector>& rTangential,
         MatrixType& rLHS,
         VectorType& rRHS);
+    */
 
     /**
      * @brief Condense the enrichment without penalty
@@ -598,8 +622,35 @@ private:
 		const MatrixType& rHTot,
 		MatrixType& rKeeTot,
 		const VectorType& rRHSeeTot);
-
+    
+    // AW 26.3: new, adapted incl. user-input
     void AddSurfaceTensionContribution(
+        const TElementData& rData,
+        MatrixType& rInterfaceShapeFunction, 
+        MatrixType& rEnrInterfaceShapeFunctionPos,
+        MatrixType& rEnrInterfaceShapeFunctionNeg,
+        GeometryType::ShapeFunctionsGradientsType& rInterfaceShapeDerivatives,
+        Vector& rInterfaceWeights,
+        std::vector< array_1d<double, 3> >& rInterfaceNormalsNeg,
+        Matrix &rLeftHandSideMatrix,
+        VectorType &rRightHandSideVector,
+        const MatrixType &rHtot,
+        const MatrixType &rVtot,
+        MatrixType &rKeeTot,
+        VectorType &rRHSeeTot,
+        const double theta_advancing,
+        const double theta_receding,
+        const double zeta,
+        const double micro_length_scale, 
+        const std::vector<Kratos::Vector>& rCLWeights,
+        const std::vector<Matrix>& rCLShapeFunctions,
+        const std::vector<Vector>& rTangential,
+        const bool quasi_static_contact_angle,
+        const double theta_equilibrium,
+        const double penalty_coefficient);
+     
+    // AW 26.3: old, outcommented
+    /* void AddSurfaceTensionContribution(
         const TElementData& rData,
         MatrixType& rInterfaceShapeFunction,
         MatrixType& rEnrInterfaceShapeFunctionPos,
@@ -619,7 +670,8 @@ private:
         const double micro_length_scale,
         const std::vector<Vector>& rCLWeights,
         const std::vector<Matrix>& rCLShapeFunctions,
-        const std::vector<Vector>& rTangential);
+        const std::vector<Vector>& rTangential);*/
+
 
     ///@}
     ///@name Private  Access

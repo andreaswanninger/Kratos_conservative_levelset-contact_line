@@ -23,6 +23,7 @@ class DropletDynamicsSolver(PythonSolver):  # Before, it was derived from Navier
     @classmethod
     def GetDefaultParameters(cls):
         ##settings string in json format
+        # AW 26.3: quasistatic contact angle settings added
         default_settings = KratosMultiphysics.Parameters("""
         {
             "solver_type": "two_fluids",
@@ -93,7 +94,12 @@ class DropletDynamicsSolver(PythonSolver):  # Before, it was derived from Navier
                 "check_at_each_time_step": true,
                 "avoid_almost_empty_elements": false,
                 "deactivate_full_negative_elements": false
-            }
+            },
+            "QuasiStatic_ContactAngle_Settings": {
+                "QuasiStatic_ContactAngle" : true,                                        
+                "Theta_equilibrium" : 130,
+                "Penalty_coefficient" : 100
+            }                                              
         }""")
 
         default_settings.AddMissingParameters(super(DropletDynamicsSolver, cls).GetDefaultParameters())
@@ -173,8 +179,17 @@ class DropletDynamicsSolver(PythonSolver):  # Before, it was derived from Navier
 
         self._apply_acceleration_limitation = self.settings["acceleration_limitation"].GetBool()
 
+        # AW 26.3: Added user-defined quasistationary contact line settings
+        qscl_settings = self.settings["QuasiStatic_ContactAngle_Settings"]
+        QuasiStatic_ContactAngle = qscl_settings["QuasiStatic_ContactAngle"].GetBool()
+        Theta_equilibrium = qscl_settings["Theta_equilibrium"].GetDouble()
+        Penalty_coefficient = qscl_settings["Penalty_coefficient"].GetDouble()
+        self.main_model_part.ProcessInfo.SetValue(KratosDroplet.QuasiStatic_ContactAngle, QuasiStatic_ContactAngle)
+        self.main_model_part.ProcessInfo.SetValue(KratosDroplet.Theta_equilibrium, Theta_equilibrium)
+        self.main_model_part.ProcessInfo.SetValue(KratosDroplet.Penalty_coefficient, Penalty_coefficient)
+
         ## Set the distance reading filename
-        # TODO: remove the manual "distance_file_name" set as soon as the problem type one has been tested.
+        # TODO: remove    the manual "distance_file_name" set as soon as the problem type one has been tested.
         #if (self.settings["distance_reading_settings"]["import_mode"].GetString() == "from_GiD_file"):
         #    self.settings["distance_reading_settings"]["distance_file_name"].SetString(self.settings["model_import_settings"]["input_filename"].GetString()+".post.res")
 
