@@ -255,6 +255,12 @@ class DropletDynamicsSolver(PythonSolver):  # Before, it was derived from Navier
         #self.main_model_part.AddNodalSolutionStepVariable(KratosDroplet.PRESSURE_STAR)                  # Last known pressure
         # self.main_model_part.AddNodalSolutionStepVariable(KratosDroplet.PRESSURE_GRADIENT_AUX)          # Pressure gradient on positive and negative sides
         #self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.NORMAL_VELOCITY)
+        # AW 31.3 + AW 2.4
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDroplet.CURVATURE_FITTED_GP1)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDroplet.CURVATURE_FITTED_GP2)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDroplet.INTERFACE_GAUSS_POINT_1)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDroplet.INTERFACE_GAUSS_POINT_2)
+
 
     def PrepareModelPart(self):
         # Restarting the simulation is OFF (needs a careful implementation)

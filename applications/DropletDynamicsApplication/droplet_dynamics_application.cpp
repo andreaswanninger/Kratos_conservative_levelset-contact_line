@@ -77,5 +77,14 @@ void KratosDropletDynamicsApplication::Register()
     // Register Elements
     KRATOS_REGISTER_ELEMENT("DropletDynamics2D3N", mDropletDynamics2D3N);
     KRATOS_REGISTER_ELEMENT("DropletDynamics3D4N", mDropletDynamics3D4N);
+
+    // AW 31.3: added this line
+    KRATOS_REGISTER_VARIABLE(CURVATURE_FITTED_GP1)
+    KRATOS_REGISTER_VARIABLE(CURVATURE_FITTED_GP2)
+    KRATOS_REGISTER_VARIABLE(IS_CUT)
+
+    // AW 2.4: Added gauss points for improved curvature fitting
+    KRATOS_REGISTER_VARIABLE(INTERFACE_GAUSS_POINT_1)
+    KRATOS_REGISTER_VARIABLE(INTERFACE_GAUSS_POINT_2)
 }
 }  // namespace Kratos.

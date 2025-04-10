@@ -61,4 +61,17 @@ namespace Kratos
     KRATOS_CREATE_VARIABLE(double, Theta_equilibrium)
     KRATOS_CREATE_VARIABLE(double, Penalty_coefficient)
 
+     // AW 31.3+ AW 2.4: Added variables for the fitted curvature/normal calculation
+     KRATOS_CREATE_VARIABLE(double, CURVATURE_FITTED_GP1)
+     KRATOS_CREATE_VARIABLE(double, CURVATURE_FITTED_GP2)
+     KRATOS_CREATE_VARIABLE(bool, IS_CUT)
+
+     // AW 2.4: Added gauss points for improved curvature fitting
+     KRATOS_CREATE_3D_VARIABLE_WITH_COMPONENTS(INTERFACE_GAUSS_POINT_1)
+     KRATOS_CREATE_3D_VARIABLE_WITH_COMPONENTS(INTERFACE_GAUSS_POINT_2)
+
+
+
+
+
 }

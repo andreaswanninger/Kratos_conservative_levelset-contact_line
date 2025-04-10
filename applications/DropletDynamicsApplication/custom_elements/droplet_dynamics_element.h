@@ -541,7 +541,9 @@ private:
         const Vector& rInterfaceWeights,
         const Matrix& rInterfaceShapeFunctions,
         const std::vector<array_1d<double,3>>& rInterfaceNormalsNeg,
-        VectorType& rRHS);
+        VectorType& rRHS,
+        // AW 31.3: necessary for preliminary checks
+        const double current_time);
 
     /**
      * @brief Computes the surface tension on the interface and implement its effect on the RHS vector
@@ -624,6 +626,7 @@ private:
 		const VectorType& rRHSeeTot);
     
     // AW 26.3: new, adapted incl. user-input
+    // AW 31.3: added current_time variable
     void AddSurfaceTensionContribution(
         const TElementData& rData,
         MatrixType& rInterfaceShapeFunction, 
@@ -647,7 +650,8 @@ private:
         const std::vector<Vector>& rTangential,
         const bool quasi_static_contact_angle,
         const double theta_equilibrium,
-        const double penalty_coefficient);
+        const double penalty_coefficient,
+        const double current_time);
      
     // AW 26.3: old, outcommented
     /* void AddSurfaceTensionContribution(

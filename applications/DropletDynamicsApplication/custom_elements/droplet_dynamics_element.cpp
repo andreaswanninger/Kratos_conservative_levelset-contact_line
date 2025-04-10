@@ -14,6 +14,8 @@
 #include "droplet_dynamics_application_variables.h"
 #include "../../FluidDynamicsApplication/custom_utilities/two_fluid_navier_stokes_data.h"
 #define PI 3.14159265358979
+// AW 31.3: added to print normal output
+#include <fstream>
 
 namespace Kratos
 {
@@ -74,6 +76,8 @@ void DropletDynamicsElement<TElementData>::CalculateLocalSystem(
     const double penalty_coefficient = rCurrentProcessInfo[Penalty_coefficient];
     const bool quasi_static_contact_angle = rCurrentProcessInfo[QuasiStatic_ContactAngle];
     const double theta_equilibrium = rCurrentProcessInfo[Theta_equilibrium];
+    // AW 31.3: added to have access to current simulation time for the curvature issue debug file
+    const double current_time = rCurrentProcessInfo[TIME];
     // Resize and intialize output
     if (rLeftHandSideMatrix.size1() != LocalSize)
         rLeftHandSideMatrix.resize(LocalSize, LocalSize, false);
@@ -115,6 +119,17 @@ void DropletDynamicsElement<TElementData>::CalculateLocalSystem(
             } */
             }
         }
+
+        // AW 31.3: If the element is cut, set IS_CUT = true for its nodes
+        if (data.IsCut()) {
+            // AW 2.4: marks the element itself as being cut
+            this->SetValue(IS_CUT, true);
+            for (unsigned int i = 0; i < NumNodes; ++i) {
+                this->GetGeometry()[i].SetValue(IS_CUT, true);
+                this->GetGeometry()[i].FastGetSolutionStepValue(IS_CUT) = true; // For Python access
+            }
+        }
+        
 
         if (data.IsCut()){
             GeometryType::Pointer p_geom = this->pGetGeometry();
@@ -328,6 +343,7 @@ void DropletDynamicsElement<TElementData>::CalculateLocalSystem(
                 /* if (rCurrentProcessInfo[SURFACE_TENSION]) {*/
                     
                     // AW 26.3: added additional variables for quasistationary contact angle 
+                    // AW 31.3: added current time variable
                 
                     AddSurfaceTensionContribution(
                         data,
@@ -352,7 +368,8 @@ void DropletDynamicsElement<TElementData>::CalculateLocalSystem(
                         contact_tangential_neg,
                         quasi_static_contact_angle,
                         theta_equilibrium,
-                        penalty_coefficient);
+                        penalty_coefficient,
+                        current_time);
 
                 /*}  else{
                     // Without pressure gradient stabilization, volume ratio is checked during condensation
@@ -2220,7 +2237,10 @@ void DropletDynamicsElement<TElementData>::SurfaceTension(
     const Vector& rInterfaceWeights,
     const Matrix& rInterfaceShapeFunctions,
     const std::vector<array_1d<double,3>>& rInterfaceNormalsNeg,
-    VectorType& rRHS)
+    VectorType& rRHS,
+    // AW 31.3: necessary for preliminary checks
+    const double current_time
+    )
 {   
     // AW 19.3: Debug Print Statement added
     // KRATOS_INFO("DropletDynamicsElement::SurfaceTension") << "Interface Surface Tension Function is called! " << std::endl;
@@ -2232,19 +2252,93 @@ void DropletDynamicsElement<TElementData>::SurfaceTension(
     // AW 19.3: Debug print statement for external force (to check if it is actually zero)
     // KRATOS_INFO("DropletDynamicsElement::SurfaceTension") << "External Interfacial Force: " << external_int_force << std::endl;
 
-    // AW 19.3: this loops over the number of Gauss Points of the interface and
-    // enforces Young-Laplace relation by modifying the rhs accordingly
-    for (unsigned int intgp = 0; intgp < rInterfaceWeights.size(); ++intgp){
-        const double intgp_curv = rCurvature(intgp);
-        const double intgp_w = rInterfaceWeights(intgp);
-        const auto& intgp_normal = rInterfaceNormalsNeg[intgp];
-        for (unsigned int i = 0; i < NumNodes; ++i){
-            for (unsigned int dim = 0; dim < NumNodes-1; ++dim){
-                rRHS[ i*(NumNodes) + dim ] += ( -SurfaceTensionCoefficient*intgp_curv*intgp_normal[dim]
-                    + external_int_force[dim] )*intgp_w*rInterfaceShapeFunctions(intgp,i);
+    // AW 31.3: to trace back the curvature/normal issue at the three phase cl, conditionally print normal and curvature for certain coordinates
+    // In our case (sessile droplet), we know that this is at the wall, identified by y=0
+
+    // AW 31.3: File output setup — append mode
+    std::ofstream output_file;
+    output_file.open("TPCL_GaussPoints.txt", std::ios::app);  // Appends across elements
+
+    // AW 2.4: Precompute Gauss point coordinates and store them elementally if possible
+    std::vector<array_1d<double, 3>> gp_coords_list;
+    for (unsigned int intgp = 0; intgp < rInterfaceWeights.size(); ++intgp) {
+        array_1d<double, 3> gp_coords = ZeroVector(3);
+        for (unsigned int i = 0; i < NumNodes; ++i) {
+            const auto& node_coords = this->GetGeometry()[i].Coordinates();
+            for (unsigned int d = 0; d < 3; ++d) {
+                gp_coords[d] += rInterfaceShapeFunctions(intgp, i) * node_coords[d];
             }
         }
+        gp_coords_list.push_back(gp_coords);
     }
+
+    if (gp_coords_list.size() > 0) {
+        KRATOS_INFO("SurfaceTension") << "Stored INTERFACE_GP_1 = " << gp_coords_list[0] << std::endl;
+        this->SetValue(INTERFACE_GAUSS_POINT_1, gp_coords_list[0]);
+    }
+    if (gp_coords_list.size() > 1) {
+        KRATOS_INFO("SurfaceTension") << "Stored INTERFACE_GP_2 = " << gp_coords_list[1] << std::endl;
+        this->SetValue(INTERFACE_GAUSS_POINT_2, gp_coords_list[1]);
+    }
+    
+   
+
+    for (unsigned int intgp = 0; intgp < rInterfaceWeights.size(); ++intgp){
+        double intgp_curv = rCurvature(intgp);  // fallback if not replaced
+        const double intgp_w = rInterfaceWeights(intgp);
+        array_1d<double,3> intgp_normal = rInterfaceNormalsNeg[intgp];
+    
+        // AW: Get Gauss point coordinates
+        array_1d<double, 3> gp_coords = ZeroVector(3);
+        for (unsigned int i = 0; i < NumNodes; ++i) {
+            const auto& node_coords = this->GetGeometry()[i].Coordinates();
+            for (unsigned int d = 0; d < 3; ++d) {
+                gp_coords[d] += rInterfaceShapeFunctions(intgp, i) * node_coords[d];
+            }
+        }
+    
+        // AW 2.4: Replace curvature with fitted GP curvature if available
+        if (gp_coords[1] < 0.0018) {
+            if (intgp == 0 && this->Has(CURVATURE_FITTED_GP1)) {
+                intgp_curv = this->GetValue(CURVATURE_FITTED_GP1);
+            } else if (intgp == 1 && this->Has(CURVATURE_FITTED_GP2)) {
+                intgp_curv = this->GetValue(CURVATURE_FITTED_GP2);
+            }
+
+            KRATOS_INFO("SurfaceTension") << "Using fitted curvature for GP y = "
+                                        << gp_coords[1] << ", x = " << gp_coords[0]
+                                        << ", curv = " << intgp_curv << std::endl;
+        }
+    
+        // Apply surface tension term
+        for (unsigned int i = 0; i < NumNodes; ++i){
+            for (unsigned int dim = 0; dim < NumNodes-1; ++dim){
+                rRHS[ i*(NumNodes) + dim ] += (
+                    -SurfaceTensionCoefficient * intgp_curv * intgp_normal[dim]
+                    + external_int_force[dim]
+                ) * intgp_w * rInterfaceShapeFunctions(intgp,i);
+            }
+        }
+    
+        // Optional debug print
+        const double tol = 11e-3;
+        if (std::abs(gp_coords[1]) < tol) {
+            std::string side = (gp_coords[0] < 0.027) ? "LEFT" : "RIGHT";
+            output_file << std::fixed << std::setprecision(8)
+                        << "Time: " << current_time
+                        << ", Element ID: " << this->Id()
+                        << ", Gauss Point: " << intgp
+                        << ", x = " << gp_coords[0]
+                        << ", y = " << gp_coords[1]
+                        << ", Curvature = " << intgp_curv
+                        << ", Normal = (" << intgp_normal[0]
+                        << ", " << intgp_normal[1]
+                        << ", " << intgp_normal[2] << ")"
+                        << ", Side: " << side
+                        << ", RHS: " << rRHS << "\n";
+        }
+    }
+    output_file.close(); // Always close after writing
 }
 
 // AW 18.3: template <class TElementData> declares the following function as a templated function
@@ -2539,8 +2633,7 @@ void DropletDynamicsElement<TElementData>::SurfaceTension(
 
             //KRATOS_INFO("two fluids NS") << "angle difference= " << std::abs(contact_angle_macro_gp - contact_angle_equilibrium)*180/PI << std::endl;
 
-            // AW 18.3: this part recovers the equilibrium contact angle that right now is set as theta_receding
-            // AW TBD 18.3: for now, test it with theta_receding; long term, replace this by importing the equilibrium contact angle
+            // AW 18.3: this part recovers the equilibrium contac   long term, replace this by importing the equilibrium contact angle
             double contact_angle_equilibrium = contact_angle_macro_gp;
             // AW adapted 26.3: set the equilibrium contact angle to user-defined value
             contact_angle_equilibrium = theta_equilibrium * PI / 180.0;
@@ -2637,7 +2730,7 @@ void DropletDynamicsElement<TElementData>::SurfaceTension(
 
             for (unsigned int i = 0; i < NumNodes; i++){
                 for (unsigned int dimi = 0; dimi < Dim; dimi++){
-                    rhs[ i*(Dim+1) + dimi ] -= coefficient*contact_vector_micro[dimi]*(rCLWeights[i_cl])[clgp]*(rCLShapeFunctions[i_cl])(clgp,i);
+                    // rhs[ i*(Dim+1) + dimi ] -= coefficient*contact_vector_micro[dimi]*(rCLWeights[i_cl])[clgp]*(rCLShapeFunctions[i_cl])(clgp,i);
                     // AW TBC 18.3: i think this is wrong; doesnt contain contribution of the difference btw actual contact angle and eq contact angle
                     //rhs[ i*(Dim+1) + dimi ] += coefficientS*wall_tangent[dimi]*(rCLWeights[i_cl])[clgp]*(rCLShapeFunctions[i_cl])(clgp,i); //Contac-line tangential force
                     // AW 18.3: imo, should be like this; AW 21.3: update, surface tension coefficient added
@@ -2850,6 +2943,7 @@ void DropletDynamicsElement<TElementData>::CondenseEnrichment(
 }
 
 // AW 26.3: added additional variables for quasistationary contact angle 
+// AW 31.3: adapted to trace back current time for curvature debug
 template <class TElementData>
 void DropletDynamicsElement<TElementData>::AddSurfaceTensionContribution(
     const TElementData& rData,
@@ -2874,7 +2968,8 @@ void DropletDynamicsElement<TElementData>::AddSurfaceTensionContribution(
     const std::vector<Vector>& rTangential,
     const bool quasi_static_contact_angle,
     const double theta_equilibrium,
-    const double penalty_coefficient)
+    const double penalty_coefficient,
+    const double current_time)
 {
     // Surface tension coefficient is set in material properties
     const double surface_tension_coefficient = this->GetProperties().GetValue(SURFACE_TENSION_COEFFICIENT);
@@ -2884,14 +2979,16 @@ void DropletDynamicsElement<TElementData>::AddSurfaceTensionContribution(
     CalculateCurvatureOnInterfaceGaussPoints(
         rInterfaceShapeFunction,
         gauss_pts_curvature);
-
+    
+    // AW 31.3: adapted to trace back current time for curvature debug
     SurfaceTension(
         surface_tension_coefficient,
         gauss_pts_curvature,
         rInterfaceWeights,
         rInterfaceShapeFunction,
         rInterfaceNormalsNeg,
-        rRightHandSideVector);  
+        rRightHandSideVector,
+        current_time);  
     
     // AW 26.3: added additional variables for quasistationary contact angle 
     SurfaceTension(
